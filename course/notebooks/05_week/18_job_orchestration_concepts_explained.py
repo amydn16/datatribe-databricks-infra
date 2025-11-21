@@ -356,7 +356,7 @@ cron_patterns = [
     ("0 2 * * *", "Daily at 2:00 AM", "Nightly ETL jobs"),
     ("0 */6 * * *", "Every 6 hours", "Periodic data refresh"),
     ("0 0 * * 0", "Weekly on Sunday midnight", "Weekly aggregations"),
-    ("0 0 1 * *", "Monthly on 1st at midnight", "Monthly reports"),
+    ("0 0 2 1 * ?", "Monthly on 1st at 2 AM", "Monthly reports"),
     ("*/15 * * * *", "Every 15 minutes", "Near real-time updates")
 ]
 
@@ -483,8 +483,8 @@ print("  - One job, multiple use cases")
 # MAGIC Task name: bronze_file_ingestion
 # MAGIC Type: Notebook
 # MAGIC Source: Workspace
-# MAGIC Path: /Workspace/course/notebooks/02_week/06_file_ingestion
-# MAGIC Cluster: [Select or create cluster]
+# MAGIC Path: /Workspace/Shared/terraform-managed/course/notebooks/02_week/06_file_ingestion.py # Example
+# MAGIC Cluster: [Select or create cluster. Remember that serverless is fully managed.]
 # MAGIC ```
 # MAGIC
 # MAGIC **Cluster Options:**
@@ -517,7 +517,7 @@ print("  - One job, multiple use cases")
 # MAGIC **Parameters Section:**
 # MAGIC ```
 # MAGIC Key: catalog          Value: databricks_course
-# MAGIC Key: schema           Value: chanukya_pekala
+# MAGIC Key: schema           Value: your_schema_name
 # MAGIC Key: process_date     Value: {{job.start_time.date}}
 # MAGIC ```
 # MAGIC
@@ -567,21 +567,21 @@ print("  - One job, multiple use cases")
 # MAGIC **Task 3: Database Ingestion (Parallel)**
 # MAGIC ```
 # MAGIC Task name: bronze_database_ingestion
-# MAGIC Path: /Workspace/course/notebooks/02_week/08_database_ingest
+# MAGIC Path: /Workspace/Shared/terraform-managed/course/notebooks/02_week/08_database_ingest.py # Example
 # MAGIC Dependencies: None
 # MAGIC ```
 # MAGIC
 # MAGIC **Task 4: S3 Ingestion (Parallel)**
 # MAGIC ```
 # MAGIC Task name: bronze_s3_ingestion
-# MAGIC Path: /Workspace/course/notebooks/02_week/09_s3_ingest
+# MAGIC Path: /Workspace/Shared/terraform-managed/course/notebooks/02_week/09_s3_ingest.py # Example
 # MAGIC Dependencies: None
 # MAGIC ```
 # MAGIC
 # MAGIC **Task 5: Validation (Depends on all ingestion tasks)**
 # MAGIC ```
 # MAGIC Task name: validate_ingestion
-# MAGIC Path: /Workspace/course/notebooks/custom/validate_bronze
+# MAGIC Path: /Workspace/course/notebooks/custom/validate_bronze.py # Example
 # MAGIC Dependencies:
 # MAGIC   - bronze_file_ingestion
 # MAGIC   - bronze_api_ingestion
@@ -618,17 +618,30 @@ print("  - One job, multiple use cases")
 # MAGIC
 # MAGIC **2. Configure Schedule**
 # MAGIC ```
-# MAGIC Schedule type: Cron
-# MAGIC Cron expression: 0 2 * * *  (Daily at 2 AM)
+# MAGIC Schedule type: QuartzCron
+# MAGIC Cron expression: 0 0 2 * * ?  (Daily at 2 AM) # Quartz Cron Expression!
 # MAGIC Timezone: America/New_York
 # MAGIC Pause status: Active
 # MAGIC ```
 # MAGIC
+# MAGIC **Quartz Cron vs. Standard Cron**
+# MAGIC
+# MAGIC Databricks uses the Quartz cron format, which is slightly different from the standard UNIX cron.
+# MAGIC
+# MAGIC **Key Differences:**
+# MAGIC - **Seconds Field**: Quartz has an optional seconds field at the beginning.
+# MAGIC - **Day of Week/Month**: Quartz uses `?` to signify "no specific value" for either day-of-month or day-of-week, which is useful when you want to schedule a task to run on a specific day of the month, regardless of the day of the week, or vice versa. Standard cron does not have this.
+# MAGIC - **Year Field**: Quartz supports an optional year field.
+# MAGIC
+# MAGIC **Example:**
+# MAGIC - **Standard Cron** (run at 2 AM every day): `0 2 * * *`
+# MAGIC - **Quartz Cron** (run at 2 AM every day): `0 0 2 * * ?` (seconds, minutes, hours, day of month, month, day of week)
+# MAGIC
 # MAGIC **Common Schedules:**
-# MAGIC - Daily at 2 AM: `0 2 * * *`
-# MAGIC - Every 6 hours: `0 */6 * * *`
-# MAGIC - Weekly Sunday 2 AM: `0 2 * * 0`
-# MAGIC - Every 15 minutes: `*/15 * * * *`
+# MAGIC - Daily at 2 AM: `0 0 2 * * ?`
+# MAGIC - Every 6 hours: `0 0 */6 * * ?`
+# MAGIC - Weekly Sunday 2 AM: `0 0 2 ? * SUN`
+# MAGIC - Every 15 minutes: `0 */15 * * * ?`
 # MAGIC
 # MAGIC ---
 # MAGIC
@@ -743,6 +756,10 @@ print("""
 # MAGIC # On your local machine or in notebook
 # MAGIC %pip install databricks-sdk
 # MAGIC ```
+# MAGIC ```python
+# MAGIC # On poetry managed environment
+# MAGIC %poetry add databricks-sdk
+# MAGIC ```
 # MAGIC
 # MAGIC **Authentication Options:**
 # MAGIC
@@ -773,10 +790,14 @@ print("""
 # MAGIC w = WorkspaceClient()  # Automatically authenticated
 # MAGIC ```
 
+# Install Databricks SDK
+%pip install databricks-sdk --quiet
+%restart_python
+
 # COMMAND ----------
 
-# Install SDK (if not already installed)
-%pip install databricks-sdk --quiet
+# Load user schema variables
+%run ../utils/user_schema_setup.py
 
 # COMMAND ----------
 
@@ -803,7 +824,7 @@ print("=== Creating Single-Task Job ===\n")
 
 # Define job configuration
 job_name = "SDK_Demo_Simple_Ingestion"
-notebook_path = "/Workspace/course/notebooks/02_week/06_file_ingestion"
+notebook_path = "/Workspace/Shared/terraform-managed/course/notebooks/02_week/06_file_ingestion.py"
 
 try:
     # Create job
@@ -817,8 +838,8 @@ try:
                     notebook_path=notebook_path,
                     source=Source.WORKSPACE,
                     base_parameters={
-                        "catalog": "databricks_course",
-                        "schema": "your_schema_name"
+                        "catalog": "{CATALOG}",
+                        "schema": "{USER_SCHEMA}"
                     }
                 ),
                 timeout_seconds=3600,  # 1 hour timeout
@@ -840,6 +861,10 @@ try:
 except Exception as e:
     print(f"❌ Error creating job: {e}")
 
+    """
+    Follow the link to trigger the created job manually, and observe the ingestion charts.
+    """
+
 # COMMAND ----------
 
 # MAGIC %md
@@ -856,31 +881,16 @@ print("=== Creating Multi-Task Ingestion Job ===\n")
 
 multi_task_job_name = "SDK_Demo_Multi_Source_Ingestion"
 
-# Define shared cluster configuration
-job_cluster = JobCluster(
-    job_cluster_key="ingestion_cluster",
-    new_cluster=ClusterSpec(
-        spark_version="14.3.x-scala2.13",
-        node_type_id="i3.xlarge",  # Adjust based on your workspace
-        autoscale=AutoScale(min_workers=2, max_workers=8),
-        spark_conf={
-            "spark.databricks.cluster.profile": "serverless",
-            "spark.databricks.repl.allowedLanguages": "python,sql"
-        }
-    )
-)
-
 # Define tasks
 tasks = [
     Task(
         task_key="ingest_files",
         description="Ingest CSV/JSON/Parquet files",
         notebook_task=NotebookTask(
-            notebook_path="/Workspace/course/notebooks/02_week/06_file_ingestion",
+            notebook_path="/Workspace/Shared/terraform-managed/course/notebooks/02_week/06_file_ingestion.py",
             source=Source.WORKSPACE,
-            base_parameters={"catalog": "databricks_course"}
+            base_parameters={"catalog": "{CATALOG}"}
         ),
-        job_cluster_key="ingestion_cluster",
         timeout_seconds=3600,
         max_retries=2
     ),
@@ -888,11 +898,10 @@ tasks = [
         task_key="ingest_api",
         description="Ingest data from REST APIs",
         notebook_task=NotebookTask(
-            notebook_path="/Workspace/course/notebooks/02_week/07_api_ingest",
+            notebook_path="/Workspace/Shared/terraform-managed/course/notebooks/02_week/07_api_ingest.py",
             source=Source.WORKSPACE,
-            base_parameters={"catalog": "databricks_course"}
+            base_parameters={"catalog": "{CATALOG}"}
         ),
-        job_cluster_key="ingestion_cluster",
         timeout_seconds=3600,
         max_retries=2
     ),
@@ -900,11 +909,10 @@ tasks = [
         task_key="ingest_database",
         description="Ingest data from databases",
         notebook_task=NotebookTask(
-            notebook_path="/Workspace/course/notebooks/02_week/08_database_ingest",
+            notebook_path="/Workspace/Shared/terraform-managed/course/notebooks/02_week/08_database_ingest.py",
             source=Source.WORKSPACE,
-            base_parameters={"catalog": "databricks_course"}
+            base_parameters={"catalog": "{CATALOG}"}
         ),
-        job_cluster_key="ingestion_cluster",
         timeout_seconds=3600,
         max_retries=2
     ),
@@ -912,11 +920,10 @@ tasks = [
         task_key="ingest_s3",
         description="Ingest data from S3/cloud storage",
         notebook_task=NotebookTask(
-            notebook_path="/Workspace/course/notebooks/02_week/09_s3_ingest",
+            notebook_path="/Workspace/Shared/terraform-managed/course/notebooks/02_week/09_s3_ingest.py",
             source=Source.WORKSPACE,
-            base_parameters={"catalog": "databricks_course"}
+            base_parameters={"catalog": "{CATALOG}"}
         ),
-        job_cluster_key="ingestion_cluster",
         timeout_seconds=3600,
         max_retries=2
     )
@@ -927,7 +934,6 @@ try:
     created_multi_job = w.jobs.create(
         name=multi_task_job_name,
         tasks=tasks,
-        job_clusters=[job_cluster],
         tags={
             "environment": "dev",
             "pipeline": "bronze_ingestion",
@@ -1032,18 +1038,17 @@ print("=== Updating Job Configuration ===\n")
 
 try:
     # Update job with schedule
-    from databricks.sdk.service.jobs import CronSchedule
+    from databricks.sdk.service.jobs import CronSchedule, PauseStatus
 
     w.jobs.update(
         job_id=demo_job_id,
         new_settings=jobs.JobSettings(
             name=multi_task_job_name,
             tasks=tasks,
-            job_clusters=[job_cluster],
             schedule=CronSchedule(
-                quartz_cron_expression="0 2 * * *",  # Daily at 2 AM
+                quartz_cron_expression="0 0 2 * * ?",  # Daily at 2AM, quartz style is different from traditional cron
                 timezone_id="America/New_York",
-                pause_status="PAUSED"  # Start paused
+                pause_status=PauseStatus.PAUSED  # Start paused
             ),
             tags={
                 "environment": "dev",
@@ -1158,12 +1163,12 @@ def create_etl_job(
                 task_key=nb['task_key'],
                 description=nb.get('description', f"Task {idx+1}"),
                 notebook_task=NotebookTask(
-                    notebook_path=nb['notebook_path'],
+                    notebook_path=nb['notebook_path'], # Relative path to defined notebook path, defined in workspace
                     source=Source.WORKSPACE,
                     base_parameters={
                         "catalog": catalog,
                         "schema": schema,
-                        "environment": environment
+                        "environment": environment #dev/staging/prod
                     }
                 ),
                 depends_on=nb.get('depends_on', []),
@@ -1199,12 +1204,12 @@ def create_etl_job(
 example_notebooks = [
     {
         "task_key": "bronze_ingestion",
-        "notebook_path": "/Workspace/course/notebooks/02_week/06_file_ingestion",
+        "notebook_path": "/Workspace/course/notebooks//Workspace/Shared/terraform-managed/course/notebooks/02_week/06_file_ingestion.py",
         "description": "Ingest raw data"
     },
     {
         "task_key": "silver_transformation",
-        "notebook_path": "/Workspace/course/notebooks/03_week/11_simple_transformations",
+        "notebook_path": "/Workspace/Shared/terraform-managed/course/notebooks/03_week/11_simple_transformations.py", # 
         "description": "Transform to silver",
         "depends_on": [{"task_key": "bronze_ingestion"}]
     }
@@ -1218,7 +1223,7 @@ job = create_etl_job(
     notebooks=example_notebooks,
     catalog="databricks_course",
     schema="my_schema",
-    schedule_cron="0 2 * * *",
+    schedule_cron="0 0 2 * * ?",
     environment="dev"
 )
 """)
@@ -1238,7 +1243,7 @@ job = create_etl_job(
 # MAGIC     {
 # MAGIC       "task_key": "ingest_sales",
 # MAGIC       "notebook_task": {
-# MAGIC         "notebook_path": "/Production/sales/01_ingest",
+# MAGIC         "notebook_path": "/Production/sales/01_ingest.py", # Update with your notebook path
 # MAGIC         "source": "WORKSPACE",
 # MAGIC         "base_parameters": {
 # MAGIC           "catalog": "prod_catalog",
@@ -1248,7 +1253,7 @@ job = create_etl_job(
 # MAGIC     }
 # MAGIC   ],
 # MAGIC   "schedule": {
-# MAGIC     "quartz_cron_expression": "0 2 * * *",
+# MAGIC     "quartz_cron_expression": "0 0 2 * * ?", # Quartz CRON expression for daily at 2AM
 # MAGIC     "timezone_id": "America/New_York"
 # MAGIC   }
 # MAGIC }
@@ -1271,7 +1276,9 @@ job = create_etl_job(
 # MAGIC       - uses: actions/checkout@v2
 # MAGIC
 # MAGIC       - name: Install Databricks CLI
-# MAGIC         run: pip install databricks-cli
+# MAGIC         run: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+# MAGIC         
+# MAGIC              echo "$HOME/.databricks/bin" >> $GITHUB_PATH
 # MAGIC
 # MAGIC       - name: Deploy Jobs
 # MAGIC         env:
