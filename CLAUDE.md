@@ -94,6 +94,11 @@ databricks-infra/
   - 3-step getting started (workspace access, find content, start learning)
   - Learning path selection (new to Databricks, know Spark, production ready, complete journey)
   - Tips for success
+  - **Google Form access request** - Simple form-based access requests (line 220)
+    - Replaced broken mailto: link that caused browser popup issues
+    - Requires admin to create Google Form and update `YOUR_FORM_ID_HERE` placeholder
+    - Benefits: No email client required, mobile-friendly, structured data, GDPR compliant
+    - Alternative email link provided for direct contact
   - Direct workspace URL: https://dbc-d8111651-e8b1.cloud.databricks.com
 
 - **platform-engineer.html** - Admin guide:
@@ -147,9 +152,12 @@ poetry run pre-commit run --all-files     # All quality checks
 
 **IMPORTANT**: This project uses **Personal Access Token (PAT)** authentication for full Terraform automation.
 
+**CRITICAL**: Local Terraform must use the **resource owner's PAT** (currently `chanukya.pekala@gmail.com`) to manage grants. Mismatch between PAT user and resource owner causes permission errors.
+
 #### Prerequisites
 - Databricks workspace admin role (required for user/group management via SCIM API)
 - Personal Access Token with admin privileges
+- **PAT must belong to the user who owns the catalogs/schemas** (currently chanukya.pekala@gmail.com)
 
 #### Generate Personal Access Token (PAT)
 1. **Login to Databricks workspace** as workspace admin:
